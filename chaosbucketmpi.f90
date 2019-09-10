@@ -1,5 +1,20 @@
-! Compile with gfortran -I/usr/local/include file.f90 -llapack95 -llapack -lopenblas -lpthread -lgfortran
-! Needs OpenBLAS and OpenMP
+! ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+!
+! WAVE-CHAOS
+!
+! A program developed to do high performance parallel computations of the wavefunction and
+! scattering matrix !statistics in various geometries. A quantum wavefunction is an analogue
+! to the electric field in two-dimensional systems with cylindrical symmetry. The S matrix
+! statistics are used to evaluate the scattering dynamics.
+!
+!
+! Compile with: mpiifort -no-wrap-margin -qopenmp -O3 pbucketmpi.f90 functionsmpi.f90 chaosbucketmpi.f90 -o bucket.out -lmkl_rt
+! Run with: mpirun ./bucket.out (use the included script, run-intel.sh)
+!
+! Needs link to OpenBLAS and OpenMP
+!
+! ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
 program bucketmodel
   use pbucket
   use functions
@@ -54,6 +69,8 @@ program bucketmodel
   dx = width/(nx-1)
   dy = height/(ny-1)
   dA = dx*dy
+
+  ! Set a exponent limit depending on precision
   if (wp .eq. sp) then
      explim = -50
   elseif (wp .eq. dp) then
@@ -82,7 +99,7 @@ program bucketmodel
         wl = wli
      end if
 
-     ! Prepare files
+     ! Prepare files in human readable format
      if (nodeid .eq. masternode) then
         print *, "____________________________________________________________________________"
         print *, ""
@@ -147,7 +164,7 @@ program bucketmodel
         end if
      end if
 
-     ! Find number of open channels based on initial wavelength and p=1
+     ! Set number of open channels based on initial wavelength and p=1
      ky = 2._wp*PI/wl
      E  = sqrt(ky**2+(PI/width)**2)
      M  = floor(E*width/PI)
@@ -203,16 +220,13 @@ program bucketmodel
         ! Recalculate ky
         ky = sqrt(E**2-(ch*PI/width)**2)
         
-        ! Construct
+        ! Construct green's function
         !$ tgi = omp_get_wtime()
         call makeGreenIncoming(bucketshape,ky,greenpotential,linearpsi,ch,M,E,nodeid,lucket)
         !$ tgf = omp_get_wtime()
         tg = tg+tgf-tgi
 
-        ! Store incoming wave and Green's function matrix (optional)
-        ! call storeInGreen(linearpsi,greenpotential,ch,wl)
-
-        ! Solve the linear system; greenpotential*psi=linearpsi, using LAPACK
+           ! Solve the linear system; greenpotential*psi=linearpsi, using LAPACK
         !$ tli = omp_get_wtime()
         call linSolve(greenpotential,linearpsi,nodeid,ch)
         !$ tlf = omp_get_wtime()
@@ -243,7 +257,6 @@ program bucketmodel
               write(76,*) j, k, real(smatrix(j,k)), aimag(smatrix(j,k)), abs(smatrix(k,j))**2
            end do
         end do
-
         close(76)
 
         ! Check if S-matrix is unitary
@@ -339,10 +352,12 @@ program bucketmodel
      write(*,'(A,I2,A)') "Node-", nodeid, " | waiting for next wavelength"
      call MPI_barrier(MPI_comm_world,error) ! Synchronize the nodes before the next wavelength
   end do
+  
   close(39)
   close(123)
   close(40)
   deallocate(greenpotential)
+  
   if (rndpotential .eqv. .true.) then
      deallocate(seed)
   end if
@@ -370,6 +385,8 @@ program bucketmodel
      ! Write logbook
      call logParameters(hours,minutes,seconds,tg,tl)
   end if
+  
   call MPI_barrier(MPI_comm_world,error)
   call MPI_finalize(error)
+  
 end program bucketmodel

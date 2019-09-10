@@ -29,15 +29,7 @@ contains
        do j = 1, nx
           surf(j) = ny
        end do
-       ! do j = 1, nx/4
-       !    surf(j) = 0._wp
-       ! end do
-       ! do j = nx/4+1, 3*nx/4
-       !    surf(j) = ny-1
-       ! end do
-       ! do j = 3*nx/4+1, nx
-       !    surf(j) = 0._wp
-       ! end do
+
        call fillLayers(surf,bucket)
 
     case (2) ! Sine potential
@@ -256,10 +248,6 @@ contains
           end if
           peaks(k,2) = nint(ps(k,2)*ny)
        end do
-       ! print *, "x-coords:"
-       ! do j = 1, rows
-       !    print *, peaks(j,2)
-       ! end do
 
        ! Connect the "dots"
        do k = 2, rows
@@ -292,10 +280,6 @@ contains
           print *, "Height and width/dupes of bucket need to be multiples of 2"
           call exit(1)
        end if
-
-       ! print *, "ny needs to be at least: ", ecc1*(ny-1)/height, ecc1*(ny-1)/height+yoff*(ny-1)/height
-       ! print *, ecc1*(ny-1)*dy/height, yoff*(ny-1)*dy/height
-       ! call exit(1)
 
        ! Dome(s)
        do k = 1, dupes
@@ -385,7 +369,7 @@ contains
        do j = 1, nx
           step = nint(surf2(j))
           bucket(j,step) = 2._wp
-          ! bucket(j,step+1) = 2._wp ! only for flat methinks
+          ! bucket(j,step+1) = 2._wp ! for flat
        end do
        do j = 1, nx
           do k = 1, ny
@@ -406,14 +390,13 @@ contains
     real(wp), dimension(nx), intent(in)           :: surf
     logical                                       :: inside
 
-    ! Fill inside
-    ! print *, "level is: ", level
+    ! Draw boundary
     do j = 1, nx
        step = nint(surf(j))
        ! print *, j, step
        bucket(j,step) = 1._wp
     end do
-    ! Fill inside
+    ! Fill the inside
     do j = 1, nx
        inside = .true.
        do k = 1, ny
@@ -535,13 +518,9 @@ contains
     !$ tgi = omp_get_wtime()
     !$OMP parallel ! num_threads(1)
     ! !$ write(*,FMT='(A4,I2,A13)') "Red ", omp_get_thread_num(), " standing by"
-    !$OMP do schedule(dynamic) ! Divides the work in x equal parts
+    !$OMP do schedule(dynamic) ! Divides the work in a dynamical way
     do j = 1, N
-       ! if (mod(j,tracker) .eq. 0) then
-       !    print *, "Progress: ", (j*100)/N, "%"
-       ! end if
        linearpsi(j) = (exp(-i*ky*y(j))-exp(i*ky*y(j)))*sin(inch*PI*x(j)/width) ! Sine modulated
-       !if (lucket(j) .ne. 0._wp) then
        do k = j, N
           greenpotential(k,j) = -green(M,B,A,x(k),x(j),y(k),y(j))
           if (j .ne. k) then
@@ -549,7 +528,6 @@ contains
           end if
           greenpotential(k,j) = greenpotential(k,j)*lucket(j)*dA
        end do
-       !end if
     end do
     !$OMP end do
     !$OMP end parallel
@@ -563,7 +541,7 @@ contains
 
   !_______________________________________________________________________________________________
   !
-  ! Constructs Green's function matrix only
+  ! Constructs Green's function matrix only (optional)
   !_______________________________________________________________________________________________
   subroutine makeGreenPotential(bucketshape,greenpotential,M,E)
     implicit none
@@ -669,10 +647,7 @@ contains
     ! !$ write(*,FMT='(A4,I2,A13)') "Red ", omp_get_thread_num(), " standing by"
     !$OMP do
     do j = 1, N
-       ! if (mod(j,tracker) .eq. 0) then
-       !    print *, "Progress: ", (j*100)/N, "%"
-       ! end if
-       linearpsi(j) = (exp(-i*ky*y(j))-exp(i*ky*y(j)))*sin(inch*PI*x(j)/width) ! Sine modulated
+       linearpsi(j) = (exp(-i*ky*y(j))-exp(i*ky*y(j)))*sin(inch*PI*x(j)/width)
     end do
     !$OMP end do
     !$OMP end parallel
@@ -694,7 +669,6 @@ contains
     complex(wp), intent(in)                        :: greenpotential(:,:)
     character(len=90)                              :: filename
 
-    ! Store incoming
     it = 1
     do j = 1, nx
        do k = 1, ny
@@ -702,27 +676,18 @@ contains
           it         = it + 1
        end do
     end do
+
     write(filename, '("tincoming", "-inch", I0, "-wl", F0.1, ".txt")') inch, wl*1e9
     open(unit = 25, file = filename, form='formatted')
     write(25, FMT='(5A15)') "x", "y", "absincoming", "real", "imag"
+    
     do j = 1, nx
        do k = 1, ny
           write (25,*) j, k, abs(iwave(j,k))**2, real(iwave(j,k)), aimag(iwave(j,k))
        end do
     end do
     close(unit = 25)
-
-    ! Store Green
-    ! if (N .le. 30*30) then
-    !    open(unit = 25, file = "tgreen.txt", form='formatted')
-    !    write(25, FMT='(4A15)') "x", "y", "green"
-    !    do j = 1, N
-    !       do k = 1, N
-    !          write(25,*) j, k, abs(greenpotential(j,k))**2
-    !       end do
-    !    end do
-    !    close(unit = 25)
-    ! end if
+    
   end subroutine storeInGreen
 
   !_______________________________________________________________________________________________
@@ -776,11 +741,13 @@ contains
     write(filename, '("toutgoing", "-inch", I0, "-wl", F0.1, ".txt")') inch, wl*1e9
     open(unit = 25, file = filename, form='formatted')
     write(25, FMT='(5A15)') "y", "x", "psi", "real", "imag"
+    
     do j = 1, ny
        do k = 1, nx
           write(25,*) j, k, abs(psi(k,j))**2, real(psi(k,j)), aimag(psi(k,j))
        end do
     end do
+    
     close(unit = 25)
   end subroutine storeOut
 
@@ -835,10 +802,8 @@ contains
        B  = sqrt(E**2 - (l*PI/width)**2)
        do j = 1, nx
           do k = 1, ny
-             ! if (bucket(j,k) .ne. 0) then
              ams(l) = ams(l) -sin(l*pw*xcrd(j))*sin(B*ycrd(k))*zbucket(j,k)*psi(j,k)&
                   &*2._wp*dA/(B*width)
-             ! End if
           end do
        end do
     end do
@@ -848,10 +813,9 @@ contains
     sumAm = 0._wp
     do k = 1, M
        km = sqrt(E**2 - (k*PI/width)**2)
-       ! print *, "sdf ", (km/kp), ams(k)!*abs(ams(k))**2
        sumAm = sumAm + (km/kp)*abs(ams(k))**2
-       ! sumAm = sumAm + abs(ams(k))**2
     end do
+    
     if (wp .eq. sp) then
        write(*,'(A,I2,A,I2,A,F10.8)') "Node-", nodeid, " | inch-", inch, " | Sum (km/kp)*|Am|^2: ", SumAm
     elseif (wp .eq. dp) then
@@ -892,7 +856,8 @@ contains
           end if
           call MPI_recv(srch,1,MPI_int,from_node,MPI_any_tag,MPI_comm_world,status,error)
           print *, "receiving from node: ", from_node
-          ! print *, "error? ", E**2-(srch*PI/width)**2, E, srch, width
+
+          ! Construct S matrix
           srm = sqrt(E**2-(srch*PI/width)**2)
           do j = 1, M
              km  = sqrt(E**2-(j*PI/width)**2)
@@ -904,32 +869,7 @@ contains
           write(*,'(A,I2,A,I2,A,I2)') "Node-", nodeid, " | inch-", inch, " | received from Node-", from_node
        end do
     end if
-
-    ! ! Write all Am's
-    ! write(filename, '("tam", "-inch", I0, "-wl", I0, ".txt")') inch, nint(wl*10*1e9)
-    ! print *, "filename: ", filename
-    ! open(unit = 25, file = filename, form='formatted')
-    ! write(25, FMT='(4A15)') "inch", "Am"
-    ! do j = 1, M
-    !    write (25,*) j, abs(ams(j))**2
-    ! end do
-    ! close(unit = 25)
-
-    ! Check if |Am|^2 is below threshold
-    ! if (sumAm .gt. hilim) then
-    !    print *, "Sum |Am|^2       ", SumAm
-    !    print *, "***"
-    !    print *, "sum|Am|^2 is too large"
-    !    print *, "***"
-    !    if (chkbnds .eqv. .true.) then
-    !       call exit(1)
-    !    end if
-    ! end if
-
-    ! Print sum
-    ! print *, "### Sum (km/kp)*|Am|^2:      ", SumAm, " ###"
-    ! write(*,FMT='(A26,I0,A5,F8.4)') "The efficiency of channel ", inch, " is: ", 1._wp-SumAm
-    ! write(*,FMT='(A12,F5.2)') "In percent: ", (1._wp-SumAm)*100._wp
+    
   end subroutine makeSmatrix
 
   !_______________________________________________________________________________________________
@@ -951,6 +891,7 @@ contains
     ! Off diagonal elements should be very small, sum of all below 1
     sumSSdag = 0._wp
     offdiag  = 0._wp
+    
     do j = 1, M
        do k = 1, M
           if (j .ne. k) then
@@ -959,6 +900,7 @@ contains
           end if
        end do
     end do
+    
     ! Scale according to size of S matrix and abs()**2
     offdiag  = offdiag/(M**2-M)
     sumSSdag = sumSSdag/(M**2-M)
@@ -966,12 +908,14 @@ contains
     write(*, FMT='(A,F18.16)') "| Sum of all off-diagonal elements of S-matrix: ", offdiag
     write(*, FMT='(A,F18.16)') "| Sum of all off-diagonal elements of SSdag   : ", sumSSdag
     write(*,'(A)') "|"
+    
     if (sumSSdag .ge. 1._wp) then
        print *, "Sum is too large! S is not unitary within the limits"
        if (chkbnds .eqv. .true.) then
           call exit(1)
        end if
     end if
+    
   end subroutine checkUnitarity
 
   !_______________________________________________________________________________________________
@@ -985,7 +929,6 @@ contains
     complex(wp), intent(out)             :: eigvals(:)
     complex(wp), dimension(M,M)          :: VL, VR, backupsmatrix
     complex(wp), allocatable             :: WORK(:)
-    ! real(wp), intent(out)                :: abseig
     real(wp), dimension(2*M)             :: RWORK
     integer(wp)                          :: INFO, LWORK, j
     character(len=1)                     :: JOBVL, JOBVR
@@ -1089,7 +1032,7 @@ contains
 
     ! Find nearest neighbors
     if (M .ge. 3) then
-       near(1) = M-angs(M)+angs(1) ! Reinhold didn't include this one
+       near(1) = M-angs(M)+angs(1)
        do j = 2, M
           near(j) = angs(j)-angs(j-1)
        end do
@@ -1232,34 +1175,24 @@ contains
 
     green = 0._wp
     yy    = abs(y1-y2)
+    
     do m = 1, opch
        ssin  = sin(pw*m*x1)*sin(pw*m*x2)
        opex1 = exp(i*B(m)*(y1+y2))
        opex2 = exp(i*B(m)*yy)
        green = green + (factor*i/B(m))*ssin*(opex1-opex2)
     end do
+    
     if (opch .ne. 0) then
        do m = opch+1, opch+clch
           ssin  = sin(pw*m*x1)*sin(pw*m*x2)
-          ! if (-A(m-opch)*(y1+y2) .lt. explim) then
-          !    clex1 = 0._wp
-          ! end if
-          ! if (-A(m-opch)*yy .lt. explim) then
-          !    clex2 = 0._wp
-          ! end if
-          ! if ((-A(m-opch)*(y1+y2) .ge. explim) .and. (-A(m-opch)*yy .ge. explim)) then
-          !    clex1 = exp(-A(m-opch)*(y1+y2))
-          !    clex2 = exp(-A(m-opch)*yy)
-          ! elseif ((-A(m-opch)*(y1+y2) .lt. explim) .and. (-A(m-opch)*yy .lt. explim)) then
-          !    exit
-          ! end if
-
           clex1 = exp(-A(m-opch)*(y1+y2))
           clex2 = exp(-A(m-opch)*yy)
-          !print *, (factor/A(m-opch)), ssin*(clex1-clex2), clex1, clex2
+
           green = green + (factor/A(m-opch))*ssin*(clex1-clex2)
        end do
     end if
+    
   end function green
 
   !_______________________________________________________________________________________________
@@ -1274,6 +1207,7 @@ contains
     ! Count the number of lines in a file
     rows = 0
     rewind(fileid)
+    
     do
        read(fileid,*,iostat=io)
        if (io .ne. 0) then
@@ -1282,12 +1216,12 @@ contains
        end if
        rows = rows + 1
     end do
+    
     rewind(fileid)
 
     ! Now rows is the total number of lines in the file
     ! not interested in the descriptors (1 line header), so:
     rows = rows-1
-
 
   end subroutine readFileLength
 
